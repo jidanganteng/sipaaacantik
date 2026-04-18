@@ -1,65 +1,259 @@
-import Image from "next/image";
+"use client";
 
+import { useState, useEffect, useRef } from "react";
+
+// --- KOMPONEN UTAMA (Canvas & Teks Menyatu) ---
 export default function Home() {
+  const canvasRef = useRef(null);
+  const audioRef = useRef(null);
+
+  // State untuk animasi mengetik (sekarang digunakan di dalam Canvas)
+  const [typingState, setTypingState] = useState({
+    show: false,
+    name: "",
+    message: "",
+    nameIndex: 0,
+    messageIndex: 0,
+    finishedName: false,
+    finishedAll: false,
+  });
+
+  const fullName = "sipaacantik ";
+  const fullMessage = "semangat terus yaa, ngoding nyaaaa ❤️✨";
+
+  // --- EFEK 1: Logika Mengetik (Typewriter Logic) ---
+  useEffect(() => {
+    // Mulai musik saat komponen dimuat (opsional, karena autoPlay kadang diblokir browser)
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => console.log("Autoplay musik diblokir. Klik layar untuk mulai."));
+    }
+
+    if (!typingState.show) return;
+
+    // Mengetik Nama
+    if (!typingState.finishedName && typingState.nameIndex < fullName.length) {
+      const timeout = setTimeout(() => {
+        setTypingState((prev) => ({
+          ...prev,
+          name: prev.name + fullName[typingState.nameIndex],
+          nameIndex: prev.nameIndex + 1,
+        }));
+      }, 150); // Kecepatan mengetik nama (lambat/dramatis)
+      return () => clearTimeout(timeout);
+    } else if (typingState.nameIndex === fullName.length && !typingState.finishedName) {
+      setTypingState((prev) => ({ ...prev, finishedName: true }));
+    }
+
+    // Mengetik Pesan (setelah Nama selesai)
+    if (typingState.finishedName && !typingState.finishedAll && typingState.messageIndex < fullMessage.length) {
+      const timeout = setTimeout(() => {
+        setTypingState((prev) => ({
+          ...prev,
+          message: prev.message + fullMessage[typingState.messageIndex],
+          messageIndex: prev.messageIndex + 1,
+        }));
+      }, 70); // Kecepatan mengetik pesan (sedikit lebih cepat)
+      return () => clearTimeout(timeout);
+    } else if (typingState.messageIndex === fullMessage.length && !typingState.finishedAll) {
+      setTypingState((prev) => ({ ...prev, finishedAll: true }));
+    }
+  }, [typingState]);
+
+  // --- EFEK 2: Logika Canvas (Kembang Api & Teks Background) ---
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", resize);
+    resize();
+
+    let particles = [];
+    let rockets = [];
+    let stars = [];
+
+    // Buat data bintang background statis
+    for (let i = 0; i < 150; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 1.5,
+        opacity: Math.random(),
+        speed: Math.random() * 0.02,
+      });
+    }
+
+    function createHeart(x, y) {
+      for (let t = 0; t < Math.PI * 2; t += 0.15) {
+        const scale = 7;
+        const px = x + scale * 16 * Math.pow(Math.sin(t), 3);
+        const py = y - scale * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+
+        particles.push({
+          x, y, targetX: px, targetY: py, life: 90,
+          color: `hsl(${Math.random() * 360},100%,75%)`,
+        });
+      }
+      // Trigger untuk mulai memunculkan teks di background
+      setTypingState((prev) => ({ ...prev, show: true }));
+    }
+
+    function spawnRocket() {
+      rockets.push({
+        x: Math.random() * canvas.width,
+        y: canvas.height,
+        targetY: canvas.height * (0.15 + Math.random() * 0.4),
+        speed: 7 + Math.random() * 2,
+        exploded: false,
+      });
+    }
+
+    const interval = setInterval(spawnRocket, 1200);
+
+    // --- FUNGSI MENGGAMBAR TEKS DI CANVAS (Background Layer) ---
+    function drawBackgroundText() {
+      if (!typingState.show) return;
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      // Menggambar Nama ("sipaacantik 💖")
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      // Ukuran Font Responsif (mengecil di layar HP)
+      const nameFontSize = Math.min(canvas.width * 0.1, 120); 
+      ctx.font = `900 ${nameFontSize}px 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`;
+
+      // Efek Glow Nama
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = "#ff4d6d";
+      ctx.fillStyle = "#f9a8d4"; // pink-300
+
+      // Menggambar teks Nama yang sudah diketik
+      ctx.fillText(typingState.name, centerX, centerY - nameFontSize * 0.3);
+
+      // Kursor berkedip untuk Nama
+      if (!typingState.finishedName && Math.floor(Date.now() / 400) % 2 === 0) {
+        const nameWidth = ctx.measureText(typingState.name).width;
+        ctx.fillStyle = "#f9a8d4";
+        ctx.fillRect(centerX + nameWidth / 2 + 5, centerY - nameFontSize * 0.8, 4, nameFontSize);
+      }
+
+      // Menggambar Pesan ("semangat terus...")
+      if (typingState.finishedName) {
+        const messageFontSize = Math.min(canvas.width * 0.04, 35);
+        ctx.font = `italic 600 ${messageFontSize}px 'Segoe UI', sans-serif`;
+        
+        // Efek Glow Pesan (lebih lembut)
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "rgba(255, 192, 203, 0.8)";
+        ctx.fillStyle = "white";
+
+        // Menggambar teks Pesan yang sudah diketik
+        ctx.fillText(typingState.message, centerX, centerY + nameFontSize * 0.6);
+
+        // Kursor berkedip untuk Pesan
+        if (!typingState.finishedAll && Math.floor(Date.now() / 400) % 2 === 0) {
+          const messageWidth = ctx.measureText(typingState.message).width;
+          ctx.fillStyle = "white";
+          ctx.fillRect(centerX + messageWidth / 2 + 5, centerY + nameFontSize * 0.6 - messageFontSize * 0.4, 3, messageFontSize);
+        }
+      }
+
+      // Reset shadow agar tidak mempengaruhi partikel kembang api
+      ctx.shadowBlur = 0;
+    }
+
+    function animate() {
+      // Background hitam solid untuk layer terbawah
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 1. Gambar Bintang (Layer paling belakang)
+      stars.forEach(star => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Efek kerlip
+        star.opacity += (Math.random() - 0.5) * 0.05;
+        if (star.opacity < 0.1) star.opacity = 0.1;
+        if (star.opacity > 1) star.opacity = 1;
+      });
+
+      // 2. Gambar Teks (Layer Background - Mengetik)
+      drawBackgroundText();
+
+      // 3. Gambar Jejak Kembang Api (Transparan agar teks di belakang tembus)
+      ctx.fillStyle = "rgba(0, 0, 0, 0.2)"; 
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 4. Update & Gambar Roket
+      rockets.forEach((r, idx) => {
+        if (!r.exploded) {
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          r.y -= r.speed;
+          if (r.y <= r.targetY) {
+            r.exploded = true;
+            createHeart(r.x, r.y);
+            rockets.splice(idx, 1);
+          }
+        }
+      });
+
+      // 5. Update & Gambar Partikel Hati
+      particles.forEach((p, i) => {
+        p.x += (p.targetX - p.x) * 0.08;
+        p.y += (p.targetY - p.y) * 0.08;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", resize);
+    };
+  }, [typingState.name, typingState.message, typingState.show]); // Re-run saat teks berubah
+
+  // Menangani klik layar untuk memulai musik (jika autoplay diblokir)
+  const handleStartAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.play();
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-black overflow-hidden relative cursor-pointer" onClick={handleStartAudio}>
+      
+      {/* 🎵 Musik - Pastikan file /public/lagu.mp3 ada */}
+      <audio ref={audioRef} loop>
+        <source src="/lagu.mp3" type="audio/mp3" />
+      </audio>
+
+      {/* Satu-satunya Canvas untuk Kembang Api & Teks Background */}
+      <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none" />
+
+      {/* Overlay transparan untuk menangkap klik awal (opsional) */}
+      {!typingState.show && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+          <p className="text-white/30 text-sm animate-pulse">Menunggu ledakan pertama... (Klik untuk musik)</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+    </main>
   );
 }
